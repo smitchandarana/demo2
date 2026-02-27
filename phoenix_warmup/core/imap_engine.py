@@ -74,12 +74,12 @@ class IMAPEngine:
         if not _IMAP_AVAILABLE:
             return []
 
+        client = None
         try:
             client = self._connect()
             client.select_folder(folder)
             uids = client.search(["UNSEEN"])
             if not uids:
-                client.logout()
                 return []
 
             messages = []
@@ -98,11 +98,17 @@ class IMAPEngine:
                 except Exception:
                     pass  # Non-critical
 
-            client.logout()
             return messages
 
-        except (IMAPClientError, OSError, TimeoutError, RuntimeError) as exc:
+        except (IMAPClientError, OSError, TimeoutError, RuntimeError):
             return []
+        finally:
+            # Always close the connection regardless of success or exception
+            if client is not None:
+                try:
+                    client.logout()
+                except Exception:
+                    pass
 
     def _parse_message(
         self,

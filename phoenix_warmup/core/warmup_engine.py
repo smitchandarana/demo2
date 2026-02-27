@@ -26,9 +26,6 @@ from storage.log_store import LogStore
 
 logger = logging.getLogger("phoenix.warmup")
 
-# Auto-pause threshold: consecutive SMTP errors before pausing inbox
-MAX_CONSECUTIVE_ERRORS = 3
-
 
 class WarmupEngine:
     """
