@@ -1,0 +1,24 @@
+# Phoenix Warm-Up Engine — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# UI framework (modern tkinter replacement)
+customtkinter>=5.2.2
+
+# Background job scheduling
+APScheduler>=3.10.4
+
+# IMAP client for inbox scanning
+imapclient>=2.3.1
+
+# Human-like content generation
+Faker>=24.0.0
+
+# Environment variable loading
+python-dotenv>=1.0.1
+
+# Image handling (for logo display in UI)
+Pillow>=10.2.0
+
+# PyInstaller for creating standalone executables
+# (only needed for building the distributable)
+pyinstaller>=6.5.0
