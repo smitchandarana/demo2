@@ -737,14 +737,24 @@ class AddInboxDialog(ctk.CTkToplevel):
         self.callback = callback
 
         self.title("Add New Inbox")
-        self.geometry("500x560")
+        self.geometry("500x600")
         self.resizable(False, False)
         self.grab_set()
         self.configure(fg_color=BG)
 
-        self._build()
+        # Pre-declare instance vars so _save()/_test_connection() never fail
+        # with AttributeError even if somehow called before _build() runs.
+        self._entries: Dict[str, ctk.CTkEntry] = {}
+        self._stage_var = ctk.StringVar(value="1")
+        self._status_lbl: Optional[ctk.CTkLabel] = None
+
+        # Defer widget creation — CTkToplevel needs one event-loop tick to
+        # fully initialize its window handle before widgets can be placed.
+        self.after(10, self._build)
 
     def _build(self) -> None:
+        # Column 1 (entry fields) must expand to fill available width.
+        self.grid_columnconfigure(1, weight=1)
         pad = {"padx": 20, "pady": 6}
 
         ctk.CTkLabel(
@@ -764,7 +774,7 @@ class AddInboxDialog(ctk.CTkToplevel):
             ("Work End (HH:MM)", "work_end", "20:00", False),
         ]
 
-        self._entries: Dict[str, ctk.CTkEntry] = {}
+        self._entries = {}
         for i, (label, key, placeholder, secret) in enumerate(fields):
             ctk.CTkLabel(
                 self, text=label, text_color=MUTED,
@@ -905,13 +915,17 @@ class EditStageDialog(ctk.CTkToplevel):
         self.grab_set()
         self.configure(fg_color=BG)
 
+        # Pre-declare before deferred build so _save() is always safe
+        self._var = ctk.StringVar(value=str(inbox.stage))
+        self.after(10, self._build)
+
+    def _build(self) -> None:
         ctk.CTkLabel(
-            self, text=f"Inbox: {inbox.email}",
+            self, text=f"Inbox: {self.inbox.email}",
             font=ctk.CTkFont(size=12), text_color=MUTED,
         ).pack(pady=(16, 4), padx=20)
 
         ctk.CTkLabel(self, text="Select Stage:", text_color=ACCENT).pack(pady=4)
-        self._var = ctk.StringVar(value=str(inbox.stage))
         ctk.CTkOptionMenu(
             self, values=["1", "2", "3", "4"], variable=self._var,
         ).pack(pady=8)
@@ -946,7 +960,13 @@ class AddRecipientsDialog(ctk.CTkToplevel):
         self.grab_set()
         self.configure(fg_color=BG)
 
-        self._build()
+        # Pre-declare so _add_manual()/_seed_faker() are always safe
+        self._email_entry: Optional[ctk.CTkEntry] = None
+        self._seed_count: Optional[ctk.CTkEntry] = None
+        self._count_lbl: Optional[ctk.CTkLabel] = None
+        self._status_lbl: Optional[ctk.CTkLabel] = None
+
+        self.after(10, self._build)
 
     def _build(self) -> None:
         ctk.CTkLabel(
