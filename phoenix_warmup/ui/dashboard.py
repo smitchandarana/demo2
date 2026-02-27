@@ -42,7 +42,7 @@ except ImportError:
 from storage.inbox_store import InboxStore, InboxRecord
 from storage.recipient_store import RecipientStore, RecipientRecord
 from storage.log_store import LogStore
-from core.ramp_logic import get_daily_limit, STAGE_LIMITS
+from core.ramp_logic import get_daily_limit
 
 # ── Brand colors ──────────────────────────────────────────────────────────── #
 PRIMARY     = "#FF6A00"   # Deep orange
@@ -209,7 +209,7 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
     def _build_left_panel(self, parent) -> None:
         left = ctk.CTkFrame(parent, fg_color=BG, corner_radius=0)
         left.grid(row=0, column=0, sticky="nsew", padx=(12, 6), pady=12)
-        left.grid_rowconfigure(1, weight=1)
+        left.grid_rowconfigure(2, weight=1)
         left.grid_columnconfigure(0, weight=1)
 
         self._build_stat_cards(left)
@@ -268,6 +268,7 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
             parent, fg_color=SECONDARY, corner_radius=8,
         )
         self._inbox_scroll.grid(row=2, column=0, sticky="nsew", pady=(0, 4))
+        self._inbox_scroll.grid_columnconfigure(0, weight=1)
         parent.grid_rowconfigure(2, weight=1)
 
     def _build_inbox_toolbar(self, parent) -> None:
@@ -392,9 +393,14 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
 
     def _refresh_inbox_table(self) -> None:
         """Clear and re-render all inbox rows from store."""
-        # Clear existing widgets
-        for widget in self._inbox_scroll.winfo_children():
-            widget.destroy()
+        # Destroy tracked row frames directly.
+        # winfo_children() on CTkScrollableFrame returns its internal canvas/
+        # scrollbars — not our custom frames — so we must use our own dict.
+        for widgets in list(self._inbox_row_widgets.values()):
+            try:
+                widgets["frame"].destroy()
+            except Exception:
+                pass
         self._inbox_row_widgets.clear()
 
         inboxes = self.inbox_store.get_all()
