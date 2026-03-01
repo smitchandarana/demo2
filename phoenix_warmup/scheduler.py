@@ -10,8 +10,10 @@ Jobs:
   daily_reset   — cron 00:00      : InboxStore.reset_daily_counts()
 """
 import logging
+from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.base import STATE_PAUSED
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -97,7 +99,12 @@ class WarmupScheduler:
             replace_existing=True,
         )
 
-        self._scheduler.start()
+        # If scheduler was previously paused (Stop → Start), resume it.
+        # Calling start() on a paused scheduler raises SchedulerAlreadyRunningError.
+        if self._scheduler.state == STATE_PAUSED:
+            self._scheduler.resume()
+        else:
+            self._scheduler.start()
         self._running = True
         logger.info("WarmupScheduler started")
         self._post_ui("status", "system", "Scheduler started")
@@ -165,7 +172,6 @@ class WarmupScheduler:
     def _post_ui(self, event_type: str, inbox: str, message: str) -> None:
         """Non-blocking post to UI queue."""
         try:
-            from datetime import datetime
             self._ui_queue.put_nowait({
                 "type": event_type,
                 "inbox": inbox,

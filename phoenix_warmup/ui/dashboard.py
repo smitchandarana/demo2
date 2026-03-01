@@ -110,6 +110,7 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
         self._feed_rows: List = []
         self._inbox_row_widgets: Dict[str, dict] = {}
         self._selected_inbox: Optional[str] = None
+        self._placeholder_lbl: Optional[ctk.CTkLabel] = None
 
         # Window setup
         self.title("Phoenix Warm-Up Engine — by Phoenix Solutions")
@@ -393,6 +394,14 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
 
     def _refresh_inbox_table(self) -> None:
         """Clear and re-render all inbox rows from store."""
+        # Destroy the "No inboxes" placeholder if it was showing.
+        if self._placeholder_lbl is not None:
+            try:
+                self._placeholder_lbl.destroy()
+            except Exception:
+                pass
+            self._placeholder_lbl = None
+
         # Destroy tracked row frames directly.
         # winfo_children() on CTkScrollableFrame returns its internal canvas/
         # scrollbars — not our custom frames — so we must use our own dict.
@@ -405,11 +414,12 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
 
         inboxes = self.inbox_store.get_all()
         if not inboxes:
-            ctk.CTkLabel(
+            self._placeholder_lbl = ctk.CTkLabel(
                 self._inbox_scroll,
                 text="No inboxes yet. Click '+ Add Inbox' to get started.",
                 text_color=MUTED, font=ctk.CTkFont(size=12),
-            ).grid(row=0, column=0, pady=20, padx=20)
+            )
+            self._placeholder_lbl.grid(row=0, column=0, pady=20, padx=20)
             return
 
         for i, inbox in enumerate(inboxes):
@@ -449,6 +459,7 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
             text_color=stage_color, width=50,
         )
         stage_lbl.grid(row=0, column=1, padx=4)
+        stage_lbl.bind("<Button-1>", lambda e, em=inbox.email: self._select_inbox(em))
 
         # Sent / Limit
         limit = inbox.daily_limit or get_daily_limit(inbox.stage)
@@ -458,6 +469,7 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
             font=ctk.CTkFont(size=11), text_color=MUTED, width=80,
         )
         sent_lbl.grid(row=0, column=2, padx=4)
+        sent_lbl.bind("<Button-1>", lambda e, em=inbox.email: self._select_inbox(em))
 
         # Status
         status_color = {
@@ -470,6 +482,7 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
             text_color=status_color, width=70,
         )
         status_lbl.grid(row=0, column=3, padx=4)
+        status_lbl.bind("<Button-1>", lambda e, em=inbox.email: self._select_inbox(em))
 
         # Last sent
         last = inbox.last_sent_at[:16] if inbox.last_sent_at else "—"
@@ -478,6 +491,7 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
             font=ctk.CTkFont(size=10), text_color=MUTED, width=110,
         )
         last_lbl.grid(row=0, column=4, padx=4)
+        last_lbl.bind("<Button-1>", lambda e, em=inbox.email: self._select_inbox(em))
 
         self._inbox_row_widgets[inbox.email] = {
             "frame": row_frame,
@@ -511,11 +525,18 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
         w["last"].configure(text=last)
 
     def _select_inbox(self, email: str) -> None:
-        """Highlight the selected inbox row."""
+        """Highlight the selected inbox row and update the pause/resume button."""
         self._selected_inbox = email
         for em, widgets in self._inbox_row_widgets.items():
             color = PRIMARY if em == email else "transparent"
             widgets["frame"].configure(border_color=color, border_width=1)
+        # Update pause button label based on the selected inbox's current status
+        inbox = self.inbox_store.find(email)
+        if inbox:
+            if inbox.status == "paused":
+                self._pause_btn.configure(text="▶ Resume")
+            else:
+                self._pause_btn.configure(text="⏸ Pause")
 
     # ================================================================== #
     #  Stats Cards                                                         #
@@ -578,6 +599,12 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
         except queue.Empty:
             pass
         finally:
+            # Update the "Next cycle" label while scheduler is running
+            if self.scheduler.is_running():
+                nxt = self.scheduler.get_next_run(self.scheduler.JOB_WARMUP)
+                self._next_cycle_lbl.configure(
+                    text=f"Next cycle: {nxt}" if nxt else "Next cycle: --"
+                )
             self.after(POLL_INTERVAL_MS, self._poll_queue)
 
     def _dispatch_event(self, event: dict) -> None:
@@ -598,6 +625,11 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
             self._set_statusbar(
                 f"⏸ {inbox_email} auto-paused: {event.get('message', '')}"
             )
+
+        elif event_type == "resume":
+            if inbox_email:
+                self._update_inbox_row(inbox_email)
+            self._refresh_stats()
 
         elif event_type == "status":
             running = self.scheduler.is_running()
@@ -672,6 +704,11 @@ class Dashboard(ctk.CTk if _CTK_AVAILABLE else object):
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
             })
         self._update_inbox_row(inbox.email)
+        # Refresh the pause button label now that status has changed
+        if inbox.status == "paused":
+            self._pause_btn.configure(text="⏸ Pause")   # was paused, now resumed
+        else:
+            self._pause_btn.configure(text="▶ Resume")   # was active, now paused
 
     def _on_delete_inbox(self) -> None:
         if not self._selected_inbox:
@@ -884,6 +921,7 @@ class AddInboxDialog(ctk.CTkToplevel):
                 paused_reason="",
                 working_hours_start=self._entries["work_start"].get().strip() or "08:00",
                 working_hours_end=self._entries["work_end"].get().strip() or "20:00",
+                display_name=self._entries["display_name"].get().strip(),
             )
             self.inbox_store.add(inbox)
             if self.callback:
@@ -1018,7 +1056,12 @@ class AddRecipientsDialog(ctk.CTkToplevel):
                                         text_color=ERROR_COLOR)
             return
         from storage.recipient_store import RecipientRecord
-        rec = RecipientRecord(email=email, name=email.split("@")[0])
+        parts = email.split("@")
+        rec = RecipientRecord(
+            email=email,
+            name=parts[0],
+            domain=parts[1] if len(parts) > 1 else "",
+        )
         self.recipient_store.add(rec)
         self._email_entry.delete(0, "end")
         self._refresh_count()

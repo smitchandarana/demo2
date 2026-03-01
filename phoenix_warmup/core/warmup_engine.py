@@ -120,6 +120,7 @@ class WarmupEngine:
             port=inbox.smtp_port,
             email=inbox.email,
             password=inbox.password,
+            display_name=inbox.display_name or inbox.email,
         )
 
         result = smtp.send(
@@ -175,12 +176,15 @@ class WarmupEngine:
                 password=inbox.password,
                 stage=new_stage,
                 daily_sent=new_sent,
-                daily_limit=get_daily_limit(new_stage),
+                # Keep today's daily_limit unchanged — reset_daily_counts() will
+                # recalculate from the new stage at midnight.
+                daily_limit=inbox.daily_limit,
                 status=inbox.status,
                 last_sent_at=datetime.now().isoformat(timespec="seconds"),
                 paused_reason="",
                 working_hours_start=inbox.working_hours_start,
                 working_hours_end=inbox.working_hours_end,
+                display_name=inbox.display_name,
             )
             self.inbox_store.update(updated)
         except Exception as exc:

@@ -29,6 +29,7 @@ HEADERS = [
     "email", "smtp_host", "smtp_port", "imap_host", "imap_port",
     "password", "stage", "daily_sent", "daily_limit", "status",
     "last_sent_at", "paused_reason", "working_hours_start", "working_hours_end",
+    "display_name",  # Added after initial release; old rows default to ""
 ]
 
 _lock = threading.Lock()
@@ -53,6 +54,7 @@ class InboxRecord:
     paused_reason: str = ""
     working_hours_start: str = "08:00"
     working_hours_end: str = "18:00"
+    display_name: str = ""
 
     def __post_init__(self):
         # Safely coerce CSV string values to int with fallback defaults.
@@ -183,11 +185,15 @@ class InboxStore:
         pass
 
     def reset_daily_counts(self) -> None:
-        """Called at midnight by the scheduler."""
+        """Called at midnight by the scheduler. Resets sent counter and
+        recalculates daily_limit from the current stage so stage advances
+        take effect at the start of the new day."""
         with _lock:
             rows = self._read_raw()
             for row in rows:
-                row["daily_sent"] = 0
+                row["daily_sent"] = "0"
+                stage = int(row.get("stage", "1") or "1")
+                row["daily_limit"] = str(STAGE_LIMITS.get(stage, 5))
             self._write_raw(rows)
 
     def update_stage(self, email: str, new_stage: int) -> None:

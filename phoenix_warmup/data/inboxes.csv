@@ -1,1 +1,1 @@
-email,smtp_host,smtp_port,imap_host,imap_port,password,stage,daily_sent,daily_limit,status,last_sent_at,paused_reason,working_hours_start,working_hours_end
+email,smtp_host,smtp_port,imap_host,imap_port,password,stage,daily_sent,daily_limit,status,last_sent_at,paused_reason,working_hours_start,working_hours_end,display_name
